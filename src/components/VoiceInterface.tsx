@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
-import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
-import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
+import SpeechService from '../services/speechService';
 
 interface VoiceInterfaceProps {
   onVoiceCommand: (command: string) => void;
@@ -14,47 +13,58 @@ export const VoiceInterface: React.FC<VoiceInterfaceProps> = ({
   language = 'hi-IN',
   isActive = true
 }) => {
-  const {
-    isListening,
-    transcript,
-    isSupported: speechRecognitionSupported,
-    startListening,
-    stopListening,
-    resetTranscript
-  } = useSpeechRecognition();
-
-  const {
-    speak,
-    cancel,
-    speaking,
-    supported: speechSynthesisSupported
-  } = useSpeechSynthesis();
-
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastCommand, setLastCommand] = useState('');
+  const [isSupported, setIsSupported] = useState(false);
+  const speechService = SpeechService.getInstance();
 
   useEffect(() => {
-    if (transcript && transcript !== lastCommand) {
-      setLastCommand(transcript);
-      onVoiceCommand(transcript);
-      resetTranscript();
-    }
-  }, [transcript, lastCommand, onVoiceCommand, resetTranscript]);
+    setIsSupported(speechService.isSupported());
+  }, []);
 
-  const handleToggleListening = () => {
-    if (isListening) {
-      stopListening();
-    } else {
-      startListening(language);
+  const handleStartListening = async () => {
+    if (isListening) return;
+
+    try {
+      setIsListening(true);
+      const command = await speechService.startListening(language);
+      setLastCommand(command);
+      onVoiceCommand(command);
+      
+      // Provide audio feedback
+      await speechService.speak('Command received', language);
+    } catch (error) {
+      console.error('Voice recognition error:', error);
+    } finally {
+      setIsListening(false);
     }
+  };
+
+  const handleStopListening = () => {
+    speechService.stopListening();
+    setIsListening(false);
   };
 
   const handleToggleSpeaking = () => {
-    if (speaking) {
-      cancel();
+    if (isSpeaking) {
+      speechService.stopSpeaking();
+      setIsSpeaking(false);
     }
   };
 
-  if (!isActive || !speechRecognitionSupported) {
+  const speakText = async (text: string) => {
+    try {
+      setIsSpeaking(true);
+      await speechService.speak(text, language);
+    } catch (error) {
+      console.error('Speech synthesis error:', error);
+    } finally {
+      setIsSpeaking(false);
+    }
+  };
+
+  if (!isActive || !isSupported) {
     return null;
   }
 
@@ -63,7 +73,7 @@ export const VoiceInterface: React.FC<VoiceInterfaceProps> = ({
       <div className="bg-white rounded-full shadow-lg border-2 border-primary-500 p-2 flex items-center space-x-2">
         {/* Voice Recognition Button */}
         <button
-          onClick={handleToggleListening}
+          onClick={isListening ? handleStopListening : handleStartListening}
           className={`p-3 rounded-full transition-all duration-300 ${
             isListening
               ? 'bg-red-500 text-white animate-pulse'
@@ -75,19 +85,17 @@ export const VoiceInterface: React.FC<VoiceInterfaceProps> = ({
         </button>
 
         {/* Speech Synthesis Button */}
-        {speechSynthesisSupported && (
-          <button
-            onClick={handleToggleSpeaking}
-            className={`p-3 rounded-full transition-all duration-300 ${
-              speaking
-                ? 'bg-blue-500 text-white animate-pulse'
-                : 'bg-secondary-500 text-white hover:bg-secondary-600'
-            }`}
-            title={speaking ? 'Stop speaking' : 'Text-to-speech available'}
-          >
-            {speaking ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-          </button>
-        )}
+        <button
+          onClick={handleToggleSpeaking}
+          className={`p-3 rounded-full transition-all duration-300 ${
+            isSpeaking
+              ? 'bg-blue-500 text-white animate-pulse'
+              : 'bg-secondary-500 text-white hover:bg-secondary-600'
+          }`}
+          title={isSpeaking ? 'Stop speaking' : 'Text-to-speech available'}
+        >
+          {isSpeaking ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+        </button>
 
         {/* Status Indicator */}
         {isListening && (
@@ -108,9 +116,21 @@ export const VoiceInterface: React.FC<VoiceInterfaceProps> = ({
             <li>• "Make worksheet" - Create worksheets</li>
             <li>• "Plan lesson" - Generate lesson plans</li>
             <li>• "Show visual aid" - Create visual aids</li>
+            <li>• "Generate game" - Create educational games</li>
           </ul>
+        </div>
+      )}
+
+      {/* Last Command Display */}
+      {lastCommand && (
+        <div className="absolute bottom-16 right-0 bg-green-50 border border-green-200 rounded-lg p-3 max-w-xs">
+          <p className="text-sm text-green-800">
+            <strong>Last command:</strong> {lastCommand}
+          </p>
         </div>
       )}
     </div>
   );
 };
+
+export default VoiceInterface;

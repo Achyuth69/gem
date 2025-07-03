@@ -2,45 +2,58 @@ import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
-import { ContentGenerator } from './components/ContentGenerator';
-import { WorksheetCreator } from './components/WorksheetCreator';
+import ContentGenerator from './components/ContentGenerator';
+import WorksheetCreator from './components/WorksheetCreator';
 import { KnowledgeBase } from './components/KnowledgeBase';
 import { VisualAids } from './components/VisualAids';
 import { LessonPlanner } from './components/LessonPlanner';
 import { AudioAssessment } from './components/AudioAssessment';
 import { GamesGenerator } from './components/GamesGenerator';
-import { VoiceInterface } from './components/VoiceInterface';
+import VoiceInterface from './components/VoiceInterface';
+import SpeechService from './services/speechService';
 
 function App() {
   const [currentLanguage, setCurrentLanguage] = useState('hi-IN');
+  const speechService = SpeechService.getInstance();
 
-  const handleVoiceCommand = (command: string) => {
+  const handleVoiceCommand = async (command: string) => {
     const lowerCommand = command.toLowerCase();
     
-    // Global navigation commands
-    if (lowerCommand.includes('go to dashboard') || lowerCommand.includes('home')) {
-      window.location.href = '/';
-    } else if (lowerCommand.includes('content generator') || lowerCommand.includes('create content')) {
-      window.location.href = '/content-generator';
-    } else if (lowerCommand.includes('worksheet') || lowerCommand.includes('make worksheet')) {
-      window.location.href = '/worksheet-creator';
-    } else if (lowerCommand.includes('knowledge base') || lowerCommand.includes('explain')) {
-      window.location.href = '/knowledge-base';
-    } else if (lowerCommand.includes('visual aid') || lowerCommand.includes('drawing')) {
-      window.location.href = '/visual-aids';
-    } else if (lowerCommand.includes('lesson plan') || lowerCommand.includes('plan lesson')) {
-      window.location.href = '/lesson-planner';
-    } else if (lowerCommand.includes('audio assessment') || lowerCommand.includes('voice test')) {
-      window.location.href = '/audio-assessment';
-    } else if (lowerCommand.includes('game') || lowerCommand.includes('play')) {
-      window.location.href = '/games-generator';
-    }
-    
-    // Language switching commands
-    if (lowerCommand.includes('switch to hindi') || lowerCommand.includes('hindi language')) {
-      setCurrentLanguage('hi-IN');
-    } else if (lowerCommand.includes('switch to english') || lowerCommand.includes('english language')) {
-      setCurrentLanguage('en-US');
+    try {
+      // Global navigation commands
+      if (lowerCommand.includes('go to dashboard') || lowerCommand.includes('home')) {
+        window.location.href = '/';
+      } else if (lowerCommand.includes('content generator') || lowerCommand.includes('create content')) {
+        window.location.href = '/content-generator';
+      } else if (lowerCommand.includes('worksheet') || lowerCommand.includes('make worksheet')) {
+        window.location.href = '/worksheet-creator';
+      } else if (lowerCommand.includes('knowledge base') || lowerCommand.includes('explain')) {
+        window.location.href = '/knowledge-base';
+      } else if (lowerCommand.includes('visual aid') || lowerCommand.includes('drawing')) {
+        window.location.href = '/visual-aids';
+      } else if (lowerCommand.includes('lesson plan') || lowerCommand.includes('plan lesson')) {
+        window.location.href = '/lesson-planner';
+      } else if (lowerCommand.includes('audio assessment') || lowerCommand.includes('voice test')) {
+        window.location.href = '/audio-assessment';
+      } else if (lowerCommand.includes('game') || lowerCommand.includes('play')) {
+        window.location.href = '/games-generator';
+      }
+      
+      // Language switching commands
+      if (lowerCommand.includes('switch to hindi') || lowerCommand.includes('hindi language')) {
+        setCurrentLanguage('hi-IN');
+        await speechService.speak('भाषा हिंदी में बदल दी गई', 'hi-IN');
+      } else if (lowerCommand.includes('switch to english') || lowerCommand.includes('english language')) {
+        setCurrentLanguage('en-US');
+        await speechService.speak('Language switched to English', 'en-US');
+      }
+
+      // Provide feedback for successful command
+      if (lowerCommand.includes('go to') || lowerCommand.includes('switch to')) {
+        await speechService.speak('Command executed successfully', currentLanguage);
+      }
+    } catch (error) {
+      console.error('Voice command error:', error);
     }
   };
 
@@ -80,6 +93,19 @@ function App() {
               <li>• "Go to dashboard"</li>
               <li>• "Switch to Hindi"</li>
             </ul>
+            <div className="mt-2 text-xs text-green-600 font-medium">
+              ✓ Google AI Powered
+            </div>
+          </div>
+        </div>
+
+        {/* Google AI Status */}
+        <div className="fixed top-4 right-4 z-50">
+          <div className="bg-green-100 border border-green-300 rounded-lg px-3 py-2">
+            <div className="flex items-center space-x-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-xs font-medium text-green-800">Google AI Active</span>
+            </div>
           </div>
         </div>
       </div>

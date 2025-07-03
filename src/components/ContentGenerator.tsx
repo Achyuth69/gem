@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, Sparkles, Download, Share2, Copy, Mic, Volume2 } from 'lucide-react';
-import { AIService } from '../services/aiService';
-import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
+import { BookOpen, Sparkles, Download, Share2, Copy, Mic, Volume2, Loader } from 'lucide-react';
+import GoogleAIService from '../services/googleAI';
+import SpeechService from '../services/speechService';
 
 export const ContentGenerator: React.FC = () => {
   const [prompt, setPrompt] = useState('');
@@ -10,7 +10,11 @@ export const ContentGenerator: React.FC = () => {
   const [gradeLevel, setGradeLevel] = useState('1-3');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState('');
-  const { speak, speaking, supported } = useSpeechSynthesis();
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  const googleAI = GoogleAIService.getInstance();
+  const speechService = SpeechService.getInstance();
 
   const languages = [
     { code: 'hi', name: 'Hindi', native: 'हिन्दी' },
@@ -44,67 +48,80 @@ export const ContentGenerator: React.FC = () => {
     
     setIsGenerating(true);
     try {
-      const aiService = AIService.getInstance();
-      const content = await aiService.generateContent(prompt, language, contentType, gradeLevel);
+      const content = await googleAI.generateHyperLocalContent(prompt, language, contentType, gradeLevel);
       setGeneratedContent(content);
+      
+      // Auto-speak the generated content
+      if (speechService.isSupported()) {
+        await handleSpeak(content);
+      }
     } catch (error) {
       console.error('Error generating content:', error);
-      setGeneratedContent('Error generating content. Please try again.');
+      setGeneratedContent('Error generating content. Please check your internet connection and try again.');
     }
     setIsGenerating(false);
+  };
+
+  const handleVoiceInput = async () => {
+    if (isListening) return;
+
+    try {
+      setIsListening(true);
+      const langCode = language === 'hi' ? 'hi-IN' : language === 'en' ? 'en-US' : `${language}-IN`;
+      const command = await speechService.startListening(langCode);
+      
+      // Process voice command
+      if (command.toLowerCase().includes('create') || command.toLowerCase().includes('generate')) {
+        setPrompt(command);
+        setTimeout(() => handleGenerate(), 500);
+      } else {
+        setPrompt(command);
+      }
+    } catch (error) {
+      console.error('Voice input error:', error);
+    } finally {
+      setIsListening(false);
+    }
+  };
+
+  const handleSpeak = async (text?: string) => {
+    const textToSpeak = text || generatedContent;
+    if (!textToSpeak) return;
+
+    try {
+      setIsSpeaking(true);
+      const langCode = language === 'hi' ? 'hi-IN' : language === 'en' ? 'en-US' : `${language}-IN`;
+      await speechService.speak(textToSpeak, langCode);
+    } catch (error) {
+      console.error('Speech error:', error);
+    } finally {
+      setIsSpeaking(false);
+    }
   };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(generatedContent);
   };
 
-  const handleSpeak = () => {
-    if (generatedContent) {
-      const langCode = language === 'hi' ? 'hi-IN' : language === 'en' ? 'en-US' : 'hi-IN';
-      speak(generatedContent, langCode);
-    }
+  const handleDownload = () => {
+    const element = document.createElement('a');
+    const file = new Blob([generatedContent], { type: 'text/plain' });
+    element.href = URL.createObjectURL(file);
+    element.download = `content-${Date.now()}.txt`;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
   };
-
-  const handleVoiceCommand = (command: string) => {
-    const lowerCommand = command.toLowerCase();
-    
-    if (lowerCommand.includes('create') || lowerCommand.includes('generate')) {
-      // Extract content from voice command
-      const contentMatch = lowerCommand.match(/(?:create|generate)\s+(.+)/);
-      if (contentMatch) {
-        setPrompt(contentMatch[1]);
-        setTimeout(handleGenerate, 500);
-      }
-    } else if (lowerCommand.includes('story')) {
-      setContentType('story');
-    } else if (lowerCommand.includes('explain')) {
-      setContentType('explanation');
-    } else if (lowerCommand.includes('hindi')) {
-      setLanguage('hi');
-    } else if (lowerCommand.includes('english')) {
-      setLanguage('en');
-    }
-  };
-
-  // Auto-generate content when voice command sets prompt
-  useEffect(() => {
-    if (prompt && prompt.length > 10) {
-      const timer = setTimeout(() => {
-        handleGenerate();
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [prompt]);
 
   return (
-    <div className="max-w-4xl mx-auto animate-fade-in">
+    <div className="max-w-6xl mx-auto animate-fade-in">
       <div className="text-center mb-8">
         <div className="flex items-center justify-center mb-4">
           <BookOpen className="h-8 w-8 text-primary-500 mr-3" />
           <h1 className="text-3xl font-bold text-gray-900">Hyper-Local Content Generator</h1>
         </div>
         <p className="text-gray-600 max-w-2xl mx-auto">
-          Create culturally relevant stories, explanations, and teaching materials in your local language
+          Create culturally relevant stories, explanations, and teaching materials in your local language using Google AI
         </p>
         <div className="mt-4 bg-blue-50 rounded-lg p-3">
           <p className="text-sm text-blue-800">
@@ -135,13 +152,21 @@ export const ContentGenerator: React.FC = () => {
                   rows={3}
                 />
                 <button
-                  onClick={() => handleVoiceCommand(prompt)}
-                  className="absolute top-2 right-2 p-2 text-gray-400 hover:text-primary-500 transition-colors"
+                  onClick={handleVoiceInput}
+                  disabled={isListening}
+                  className={`absolute top-2 right-2 p-2 transition-colors ${
+                    isListening 
+                      ? 'text-red-500 animate-pulse' 
+                      : 'text-gray-400 hover:text-primary-500'
+                  }`}
                   title="Use voice input"
                 >
                   <Mic className="h-4 w-4" />
                 </button>
               </div>
+              {isListening && (
+                <p className="text-sm text-blue-600 mt-1">🎤 Listening... Speak now</p>
+              )}
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
@@ -200,13 +225,13 @@ export const ContentGenerator: React.FC = () => {
             <button
               onClick={handleGenerate}
               disabled={!prompt.trim() || isGenerating}
-              className="w-full bg-primary-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-primary-500 text-white py-3 px-6 rounded-lg font-medium hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
             >
               {isGenerating ? (
-                <span className="flex items-center justify-center">
-                  <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                  Generating...
-                </span>
+                <>
+                  <Loader className="animate-spin h-4 w-4 mr-2" />
+                  Generating with Google AI...
+                </>
               ) : (
                 'Generate Content'
               )}
@@ -220,16 +245,14 @@ export const ContentGenerator: React.FC = () => {
             <h2 className="text-xl font-semibold">Generated Content</h2>
             {generatedContent && (
               <div className="flex space-x-2">
-                {supported && (
-                  <button
-                    onClick={handleSpeak}
-                    disabled={speaking}
-                    className="p-2 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
-                    title="Read aloud"
-                  >
-                    <Volume2 className={`h-4 w-4 ${speaking ? 'animate-pulse' : ''}`} />
-                  </button>
-                )}
+                <button
+                  onClick={() => handleSpeak()}
+                  disabled={isSpeaking}
+                  className="p-2 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
+                  title="Read aloud"
+                >
+                  <Volume2 className={`h-4 w-4 ${isSpeaking ? 'animate-pulse' : ''}`} />
+                </button>
                 <button
                   onClick={handleCopy}
                   className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
@@ -238,6 +261,7 @@ export const ContentGenerator: React.FC = () => {
                   <Copy className="h-4 w-4" />
                 </button>
                 <button
+                  onClick={handleDownload}
                   className="p-2 text-gray-500 hover:text-gray-700 transition-colors"
                   title="Download"
                 >
@@ -262,8 +286,17 @@ export const ContentGenerator: React.FC = () => {
           ) : (
             <div className="text-center py-12 text-gray-500">
               <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>Your generated content will appear here</p>
-              <p className="text-xs mt-2">Try using voice commands for faster input!</p>
+              <p>Your AI-generated content will appear here</p>
+              <p className="text-xs mt-2">Powered by Google Gemini AI</p>
+            </div>
+          )}
+
+          {isSpeaking && (
+            <div className="mt-4 bg-blue-50 rounded-lg p-3">
+              <p className="text-sm text-blue-800 flex items-center">
+                <Volume2 className="h-4 w-4 mr-2 animate-pulse" />
+                Reading content aloud...
+              </p>
             </div>
           )}
         </div>
@@ -308,28 +341,23 @@ export const ContentGenerator: React.FC = () => {
         </button>
       </div>
 
-      {/* Tips Section */}
-      <div className="mt-8 bg-blue-50 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-blue-900 mb-3">Tips for Better Content</h3>
-        <div className="grid md:grid-cols-2 gap-4 text-sm text-blue-800">
-          <div>
-            <h4 className="font-medium mb-2">Voice Commands</h4>
-            <p>Use natural language like "Create a story about..." or "Explain how..."</p>
-          </div>
-          <div>
-            <h4 className="font-medium mb-2">Local Context</h4>
-            <p>Mention local customs, festivals, or familiar situations for better relatability.</p>
-          </div>
-          <div>
-            <h4 className="font-medium mb-2">Grade-Appropriate</h4>
-            <p>Select the right grade level to ensure vocabulary matches your students' abilities.</p>
-          </div>
-          <div>
-            <h4 className="font-medium mb-2">Multi-Language</h4>
-            <p>Switch between languages easily to create content in your preferred language.</p>
+      {/* Google AI Badge */}
+      <div className="mt-8 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6">
+        <div className="text-center">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Powered by Google AI</h3>
+          <p className="text-sm text-gray-600 mb-4">
+            Using Google Gemini for advanced content generation with cultural context and local relevance
+          </p>
+          <div className="flex justify-center items-center space-x-4 text-xs text-gray-500">
+            <span>✓ Real-time AI Generation</span>
+            <span>✓ Multi-language Support</span>
+            <span>✓ Cultural Context</span>
+            <span>✓ Voice Integration</span>
           </div>
         </div>
       </div>
     </div>
   );
 };
+
+export default ContentGenerator;
