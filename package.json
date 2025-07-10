@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "firebase": "firebase",
     "firebase:deploy": "firebase deploy",
-    "firebase:serve": "firebase serve"
+    "firebase:serve": "firebase serve",
     "deploy": "npm run build && firebase deploy"
   },
   "dependencies": {
